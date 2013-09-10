@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+
+  <title>My Backbone Flavored Parse App</title>
+  <meta name="description" content="My Parse App">
+  <meta name="viewport" content="width=device-width">
+
+  <link href="//netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap.min.css" rel="stylesheet">
+  
+  <style type="text/css">
+    code {
+      background: none;
+    }
+
+    .alert {
+      margin-top: 20px;
+    }
+
+    .object {
+      border-top: 1px solid #ddd;
+      padding: 5px 2px;
+
+      background-color: none;
+      color: black;
+    }
+
+    .object:last-child {
+      border-bottom: 1px solid #ddd;
+    }
+
+    .object:hover {
+      background-color: #eee;
+    }
+
+    .object.selected {
+      background-color: steelBlue;
+      color: white;
+    }
+
+    .object p {
+      padding: 0;
+      margin: 0;
+    }
+
+    body {
+      padding-top: 20px;
+    }
+
+    #create-button {
+      margin-bottom: 10px;
+    }
+
+  </style>
+
+  <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+  <script type="text/javascript" src="http://www.parsecdn.com/js/parse-1.2.10.min.js"></script>
+  <script src="//netdna.bootstrapcdn.com/bootstrap/3.0.0/js/bootstrap.min.js"></script>
+  <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.5.1/underscore-min.js"></script>
+</head>
+<body>
+
+ <div id="main" class="container">
+
+    <div class="row">
+
+      <div class="col-md-4" id="sidebar">
+        <button type="button" class="btn btn-primary" id="create-button">Create FooBar</button>
+        <div id="objects">
+
+        </div>
+      </div>
+
+      <div class="col-md-8">
+
+        <div style="display:none" class="alert alert-danger">
+          <a class="close" data-dismiss="alert" href="#" aria-hidden="true">&times;</a>
+          Looks like there was a problem saving the test object. Make sure you've set your application ID and javascript key correctly in the call to <code>Parse.initialize</code> in this file.
+        </div>
+
+        <div style="display:none" class="alert alert-success">
+          <a class="close" data-dismiss="alert" href="#" aria-hidden="true">&times;</a>
+          <p>We've also just created your first object using the following code:</p>
+            <code>
+              var TestObject = Parse.Object.extend("TestObject");<br/>
+              var testObject = new TestObject();<br/>
+              testObject.save({foo: "bar"});
+            </code>
+        </div>
+
+        <h1>Backbone Flavored Parse app</h1>
+       
+        <div id="create-wrapper">
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Templates -->
+
+  <!-- notice that we've removed the surround div for our object-template
+       backbone is creating it for us using the tagName attribute -->
+
+  <script type="text/template" id="object-template">
+    <p><a href="#" class="delete pull-right">delete</a></p>
+    <p>Foo: <%= get('foo') %></p>
+    <p>Baz: <%= get('baz') %></p>
+  </script>
+
+  <script type="text/tempate" id="create-object-template">
+    <form id="create-form" role="form" data-object-id= <%= id %> >
+      <div class="form-group">
+        <label for="foo">Foo:</label>
+        <input type="text" name="foo" class="form-control" value="<%= get('foo') %>">
+      </div>
+      <div class="form-group">
+        <label for="baz">Baz:</label>
+        <input type="text" name="baz" class="form-control" value="<%= get('baz') %>">
+      </div>
+      <button type="submit" class="btn btn-default">Update Values</button>
+    </form>
+  </script>
+
+  <!-- Application script -->
+
+  <script type="text/javascript">
+
+  	// == Global application namespace
+
+  	var app = app || {};
+
+  	// == Parse initialization
+
+  	Parse.initialize("w24LBC3VbPBptdPPVBnrFjFhDWu281AzTl9b8g0h", 
+                      "ngiVEuO7uuDHwJDfA0lTTWRGJkkw5ZPaOGsnPHzW");
+
+
+  	// == Create our test object
+
+  	app.TestObject = Parse.Object.extend("TestObject", {
+  		defaults: {
+  			foo: "not just foo",
+  			baz: "more than baz"
+  		}
+  	});
+  	
+
+  	// == Create our test object collection
+
+  	var ObjectCollection = Parse.Collection.extend({
+  		model: app.TestObject,
+
+  		comparator: function(object) {
+  			return object.createdAt;
+  		}
+  	});
+
+    // and add it to the app namespace
+
+  	app.TestObjects = new ObjectCollection();
+
+    // be careful! app.TestObject is our prarse model for a database object
+    // while app.TestObjects [plural] is our collection
+    // perhaps bad naming
+
+
+    // == Create our test object view
+    // because we specify a tag name, this view will create a new DOM element for us
+    // that new DOM element will be attached to el and $el
+
+    app.ObjectView = Parse.View.extend({
+      tagName: "div",
+      className: "object",
+      template: _.template( $('#object-template').html() ),
+     
+      // the events object
+      // events are declartive: the key is the event we want to bind + the target
+      // the value is the name of the method we want to call
+
+      events: {
+        
+        "click": "select",
+        "click .delete": "clear"
+      },
+
+      // initialize is called when we create a new view
+      // notice that we refer to a model attribute on the view
+      // we must provide that attribute
+
+      initialize: function() {
+        _.bindAll(this, 'render', 'remove');
+        this.model.bind('change', this.render);
+        this.model.bind('destroy', this.remove);
+      },
+
+      render: function() {
+        this.$el.html( this.template( this.model ) ); // .toJSON()
+        return this;
+      },
+
+      // custom methods
+
+      select: function() {
+        console.log('selected', this.model.get('foo'));
+        this.trigger('selected', this);
+      },
+
+      clear: function() {
+        console.log('deleting', this.model.get('foo'));
+        this.model.destroy();
+        return false;
+      }
+
+    });
+
+    // == Create our update form view
+    // because we specify a tag name, this view will create a new DOM element for us
+    // that new DOM element will be attached to el and $el
+
+    app.UpdateObjectView = Parse.View.extend({
+      tagName: "div",
+      template: _.template( $('#create-object-template').html() ),
+      
+      events: {
+        "click button[type=submit]": "updateObject"
+      },
+
+      initialize: function() {
+
+      },
+
+      render: function() {
+        this.$el.html( this.template( this.model ) ); // .toJSON()
+        return this;
+      },
+
+      // custom methods
+
+      // this.el refers to the DOM element for this view
+      // this.$el refers to the jQuery DOM element for this view
+      // this.$el is the same as $(this.el) - do you understand why?
+
+      // we can use this.$el to limit the scope of our jQuery selectors
+      // to only elements in the DOM which are contained by this view
+
+      updateObject: function() {
+        var foo = this.$el.find('input[name=foo]').first().val();
+        var baz = this.$el.find('input[name=baz]').first().val();
+        this.model.save({
+          foo: foo,
+          baz: baz
+        });
+        return false;
+      }
+
+    });
+
+    // == Create our main app view
+    // because we specify an element (el), this view will attach to existing DOM
+    // we must have an element whose id is main in our html
+
+    app.AppView = Parse.View.extend({
+      el: '#main',
+
+      events: {
+        "click #create-button": "createObject"
+      },
+
+      initialize: function() {
+        _.bindAll(this, 'addAll', 'addOne', 'objectSelected');
+        // Use the test collection with a query
+        app.TestObjects.query = new Parse.Query(app.TestObject);
+        app.TestObjects.bind('reset', this.addAll);
+        app.TestObjects.bind('add', this.addOne);
+        // and start it going
+        app.TestObjects.fetch();
+      },
+
+      render: function() {
+        // not actually called by our application
+      },
+
+      addAll: function() {
+        $('#objects').html('');
+        app.TestObjects.each(this.addOne, this);
+      },
+
+      addOne: function(object) {
+        var view = new app.ObjectView({ model: object});
+        view.bind('selected', this.objectSelected);
+        $('#objects').append(view.render().el);
+      },
+
+      createObject: function() {
+        app.TestObjects.create();
+      },
+
+      objectSelected: function(view) {
+        var view = new app.UpdateObjectView({model: view.model});
+        $('#create-wrapper').html(view.render().el);
+      }
+
+    });
+
+    // == start the application
+
+    new app.AppView();
+    
+  </script>
+
+</body>
+</html>
